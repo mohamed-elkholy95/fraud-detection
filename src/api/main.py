@@ -120,6 +120,73 @@ async def predict_batch(request: BatchPredictionRequest) -> BatchPredictionRespo
     )
 
 
+@app.post("/predict/stream")
+async def predict_stream(request: BatchPredictionRequest) -> dict:
+    """Stream-style batch prediction with per-transaction results and summary.
+
+    Processes all transactions in the batch and returns per-item results plus
+    aggregate statistics including cost estimate.
+
+    Args:
+        request: Batch of transactions.
+
+    Returns:
+        Dict with results list, summary, and cost estimate.
+    """
+    results = []
+    total_latency_ms = 0.0
+    fraud_detected = 0
+    cost_estimate = 0.0
+
+    # Cost constants: false positive = $10, review = $2, block assumed fraud = $0
+    COST_PER_REVIEW = 2.0
+    COST_PER_BLOCK = 0.0
+    COST_PER_APPROVE = 0.0
+
+    for idx, tx in enumerate(request.transactions):
+        pred = await predict(tx)
+        total_latency_ms += pred.latency_ms or 0.0
+
+        if pred.decision == "block":
+            fraud_detected += 1
+            cost_estimate += COST_PER_BLOCK
+        elif pred.decision == "review":
+            cost_estimate += COST_PER_REVIEW
+        else:
+            cost_estimate += COST_PER_APPROVE
+
+        results.append({
+            "index": idx,
+            "fraud_probability": pred.fraud_probability,
+            "decision": pred.decision,
+            "confidence": pred.confidence,
+            "latency_ms": pred.latency_ms,
+        })
+
+    total = len(results)
+    avg_latency = round(total_latency_ms / total, 2) if total > 0 else 0.0
+    avg_fraud_prob = round(sum(r["fraud_probability"] for r in results) / total, 4) if total > 0 else 0.0
+
+    return {
+        "results": results,
+        "summary": {
+            "total_processed": total,
+            "fraud_detected": fraud_detected,
+            "approve_count": sum(1 for r in results if r["decision"] == "approve"),
+            "review_count": sum(1 for r in results if r["decision"] == "review"),
+            "block_count": fraud_detected,
+            "avg_fraud_probability": avg_fraud_prob,
+            "avg_processing_time_ms": avg_latency,
+            "total_latency_ms": round(total_latency_ms, 2),
+        },
+        "cost_estimate": {
+            "total_cost_usd": round(cost_estimate, 2),
+            "cost_per_transaction_usd": round(cost_estimate / total, 4) if total > 0 else 0.0,
+            "currency": "USD",
+        },
+    }
+
+
 @app.get("/model/performance")
 async def model_performance() -> dict:
     """Return current model performance metrics."""

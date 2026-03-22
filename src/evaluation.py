@@ -12,6 +12,7 @@ try:
         roc_auc_score, average_precision_score, confusion_matrix,
         classification_report, precision_recall_curve, roc_curve,
     )
+    from sklearn.model_selection import StratifiedKFold
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
@@ -146,6 +147,81 @@ def get_roc_curve_data(
 
     fpr, tpr, thresholds = roc_curve(y_true, y_proba)
     return {"fpr": fpr, "tpr": tpr, "thresholds": thresholds}
+
+
+def cross_validate_models(
+    X: np.ndarray,
+    y: np.ndarray,
+    model_train_func: Any,
+    cv: int = 5,
+    **train_kwargs: Any,
+) -> Dict[str, Any]:
+    """Cross-validate a model training function using StratifiedKFold.
+
+    Args:
+        X: Feature matrix.
+        y: Target labels.
+        model_train_func: Callable that accepts (X_train, y_train, **kwargs) and
+            returns a fitted model with predict_proba.
+        cv: Number of folds.
+        **train_kwargs: Additional keyword arguments forwarded to model_train_func.
+
+    Returns:
+        Dict with:
+          - mean/std for roc_auc, pr_auc, f1, precision, recall
+          - fold_results: list of per-fold metric dicts
+    """
+    if not SKLEARN_AVAILABLE:
+        return {}
+
+    skf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=42)
+    fold_results: List[Dict[str, float]] = []
+
+    for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X, y)):
+        X_tr, X_val = X[train_idx], X[val_idx]
+        y_tr, y_val = y[train_idx], y[val_idx]
+
+        try:
+            model = model_train_func(X_tr, y_tr, **train_kwargs)
+            if model is None:
+                logger.warning("Fold %d: model_train_func returned None", fold_idx)
+                continue
+
+            if hasattr(model, "predict_proba"):
+                y_proba = model.predict_proba(X_val)[:, 1]
+            else:
+                logger.warning("Fold %d: model has no predict_proba", fold_idx)
+                continue
+
+            y_pred = (y_proba >= 0.5).astype(int)
+
+            fold_metrics: Dict[str, float] = {
+                "roc_auc": float(roc_auc_score(y_val, y_proba)),
+                "pr_auc": float(average_precision_score(y_val, y_proba)),
+                "f1": float(f1_score(y_val, y_pred, zero_division=0)),
+                "precision": float(precision_score(y_val, y_pred, zero_division=0)),
+                "recall": float(recall_score(y_val, y_pred, zero_division=0)),
+            }
+            fold_results.append(fold_metrics)
+            logger.info("Fold %d: roc_auc=%.4f pr_auc=%.4f", fold_idx, fold_metrics["roc_auc"], fold_metrics["pr_auc"])
+        except Exception as exc:
+            logger.warning("Fold %d failed: %s", fold_idx, exc)
+
+    if not fold_results:
+        return {"fold_results": [], "n_folds": 0}
+
+    metric_names = list(fold_results[0].keys())
+    aggregated: Dict[str, float] = {}
+    for metric in metric_names:
+        values = [f[metric] for f in fold_results]
+        aggregated[f"{metric}_mean"] = round(float(np.mean(values)), 4)
+        aggregated[f"{metric}_std"] = round(float(np.std(values)), 4)
+
+    return {
+        **aggregated,
+        "fold_results": fold_results,
+        "n_folds": len(fold_results),
+    }
 
 
 def generate_evaluation_report(metrics: Dict[str, float]) -> str:

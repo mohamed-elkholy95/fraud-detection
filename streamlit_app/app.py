@@ -36,5 +36,6 @@ pg = st.navigation([
     st.Page("pages/3_🤖_Model_Analysis.py", title="Model Analysis", icon="🤖"),
     st.Page("pages/4_⚡_Real_Time_Detection.py", title="Real-Time Detection", icon="⚡"),
     st.Page("pages/5_📈_Drift_Monitor.py", title="Drift Monitor", icon="📈"),
+    st.Page("pages/6_📤_Export.py", title="Export", icon="📤"),
 ])
 pg.run()
