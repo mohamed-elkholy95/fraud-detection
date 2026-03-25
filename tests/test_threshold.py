@@ -49,6 +49,42 @@ class TestThresholdAnalysis:
             assert df[col].max() <= 1.0
 
 
+class TestOptimizeThresholdEdgeCases:
+    """Edge case tests for threshold optimization robustness."""
+
+    def test_empty_arrays(self):
+        """Empty inputs should return safe default of 0.5."""
+        t = optimize_threshold(np.array([]), np.array([]))
+        assert t == 0.5
+
+    def test_all_legitimate(self):
+        """When all transactions are legitimate, threshold should be high."""
+        y_true = np.zeros(100)
+        y_proba = np.random.uniform(0, 0.3, 100)
+        t = optimize_threshold(y_true, y_proba)
+        assert isinstance(t, float)
+
+    def test_all_fraud(self):
+        """When all transactions are fraud, threshold should be low."""
+        y_true = np.ones(100)
+        y_proba = np.random.uniform(0.5, 1.0, 100)
+        t = optimize_threshold(y_true, y_proba)
+        assert t <= 0.5
+
+    def test_perfect_separation(self):
+        """Perfect model probabilities should yield clean separation."""
+        y_true = np.array([0] * 50 + [1] * 50)
+        y_proba = np.array([0.0] * 50 + [1.0] * 50)
+        t = optimize_threshold(y_true, y_proba)
+        # Any threshold between 0 and 1 achieves zero cost
+        assert 0.01 <= t <= 0.99
+
+    def test_array_length_mismatch(self):
+        """Mismatched array lengths should raise ValueError."""
+        with pytest.raises(ValueError, match="length mismatch"):
+            optimize_threshold(np.array([0, 1]), np.array([0.1, 0.2, 0.3]))
+
+
 class TestCostCurve:
     def test_returns_arrays(self, predictions):
         y_true, y_proba = predictions
