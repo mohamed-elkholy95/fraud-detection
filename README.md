@@ -35,6 +35,33 @@ python -m pytest tests/ -v
 streamlit run streamlit_app/app.py
 ```
 
+## Project Structure
+
+```
+src/
+├── api/              # FastAPI REST endpoints (predict, batch, stream)
+├── data/             # Data loading, feature engineering, validation
+│   ├── loader.py     # Data loading with synthetic fallback
+│   ├── feature_engineering.py  # Temporal, amount, and interaction features
+│   ├── validation.py # Data quality checks before training/inference
+│   └── augmentation.py  # SMOTE/ADASYN oversampling
+├── models/           # Model training and ensembling
+│   ├── supervised.py # LR, RF, XGBoost, LightGBM, CatBoost
+│   ├── unsupervised.py  # Isolation Forest, Autoencoder
+│   ├── ensemble.py   # Weighted ensemble combiner
+│   └── comparison.py # Model comparison and selection utilities
+├── config.py         # Centralized configuration (env var overrides)
+├── evaluation.py     # Metrics, cross-validation, report generation
+├── threshold.py      # Cost-sensitive threshold optimization
+├── monitoring.py     # KS-test and PSI drift detection
+├── explainability.py # SHAP and LIME explanation wrappers
+└── pipeline.py       # End-to-end orchestrator
+docs/
+├── ARCHITECTURE.md   # System design and module responsibilities
+└── GLOSSARY.md       # Fraud detection concepts and terminology
+tests/                # 60+ test cases across all modules
+```
+
 ## Cost Model
 
 | Error Type | Cost | Rationale |
@@ -42,6 +69,14 @@ streamlit run streamlit_app/app.py
 | False Positive | $10 | Manual review cost |
 | False Negative | $500 | Fraud loss |
 | Optimal Threshold | Dynamic | Minimizes total cost |
+
+Costs are configurable via environment variables (`FRAUD_COST_FP`, `FRAUD_COST_FN`)
+for deployment flexibility without code changes.
+
+## Documentation
+
+- **[Architecture Guide](docs/ARCHITECTURE.md)** — System design, module responsibilities, design decisions
+- **[Glossary](docs/GLOSSARY.md)** — Key concepts, metrics, and techniques explained
 
 ## Author
 
