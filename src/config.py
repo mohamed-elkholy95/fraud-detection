@@ -1,9 +1,18 @@
 # Fraud Detection - Configuration
+#
+# Central configuration for the entire fraud detection pipeline.
+# Values can be overridden via environment variables for deployment
+# flexibility without code changes (12-factor app principle).
+#
+# Environment variable format: FRAUD_<SETTING_NAME>
+# Example: FRAUD_COST_FP=15.0 overrides COST_FALSE_POSITIVE
 import logging
+import os
 from pathlib import Path
 
 # Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+LOG_LEVEL = os.getenv("FRAUD_LOG_LEVEL", "INFO")
+logging.basicConfig(level=getattr(logging, LOG_LEVEL), format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 # Paths
@@ -19,9 +28,13 @@ LOG_DIR = BASE_DIR / "logs"
 for d in [DATA_DIR, RAW_DIR, PROCESSED_DIR, MODEL_DIR, REPORT_DIR, LOG_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-# Cost parameters for threshold optimization
-COST_FALSE_POSITIVE = 10.0   # Customer friction cost
-COST_FALSE_NEGATIVE = 500.0  # Fraud loss cost
+# Cost parameters for threshold optimization.
+# These values should be calibrated with the fraud operations team.
+# The ratio (FN_cost / FP_cost) drives threshold selection:
+#   - Higher ratio → lower threshold → catch more fraud, more false alarms
+#   - Lower ratio → higher threshold → fewer false alarms, miss more fraud
+COST_FALSE_POSITIVE = float(os.getenv("FRAUD_COST_FP", "10.0"))   # Customer friction cost
+COST_FALSE_NEGATIVE = float(os.getenv("FRAUD_COST_FN", "500.0"))  # Fraud loss cost
 
 # Dataset
 DATASET_URL = "https://datahub.io/machine-learning/creditcard/r/creditcard.csv"
