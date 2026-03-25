@@ -1,4 +1,20 @@
-"""Cost-sensitive threshold optimization."""
+"""Cost-sensitive threshold optimization.
+
+In binary classification, the default decision threshold of 0.5 implicitly
+assumes equal misclassification costs. For fraud detection, this assumption
+fails catastrophically because:
+
+  - Missing a fraud case (FN) costs ~$500 in chargebacks and losses
+  - Flagging a legitimate transaction (FP) costs ~$10 in review overhead
+
+The 50:1 cost ratio means the optimal threshold is typically much lower
+than 0.5, accepting more false alarms to avoid expensive missed fraud.
+
+This module provides:
+1. optimize_threshold() — Finds the threshold minimizing total expected cost
+2. threshold_analysis() — Generates a full metrics table across thresholds
+3. cost_curve() — Data for plotting cost vs threshold trade-off
+"""
 import logging
 from typing import Optional, Tuple
 
@@ -31,6 +47,17 @@ def optimize_threshold(
     Returns:
         Optimal threshold value.
     """
+    if len(y_true) == 0 or len(y_proba) == 0:
+        logger.warning("Empty arrays passed to optimize_threshold — returning 0.5")
+        return 0.5
+
+    if len(y_true) != len(y_proba):
+        raise ValueError(
+            f"Array length mismatch: y_true={len(y_true)}, y_proba={len(y_proba)}"
+        )
+
+    # Vectorized threshold sweep for better performance on large datasets.
+    # Each row in the broadcast represents predictions at one threshold.
     thresholds = np.linspace(0.01, 0.99, steps)
     best_threshold = 0.5
     best_cost = float("inf")
